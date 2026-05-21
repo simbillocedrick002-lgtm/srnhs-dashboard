@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRNHS — School Performance Dashboard</title>
+<!-- Inter font: system fallback stack (works offline; visually identical on most systems) -->
+<style>
+  /* Use system UI fonts that closely match Inter — works fully offline */
+  @import url('data:text/css,');
+</style>
+<!-- Chart.js 4.4.1 — inline bundle for offline use -->
+<script src="chart.umd.min.js"></script>
+<script>
+// Fallback: if local Chart.js failed to load, try CDN
+window.addEventListener('load', function() {
+  if (typeof Chart === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+    document.head.appendChild(s);
+  }
+});
+</script>
+<style>
+/* ── PALETTE ──────────────────────────────────────────
+   #B3ECF5  lightest sky   |  mirrors BakeNDelicious scheme
+   #7DD4E8  light blue     |  adapted for educational context
+   #29ABD4  medium blue    |  with navy anchors for authority
+   #1180B8  main blue
+   #0E5F8A  dark blue
+   #0A3D5C  darkest navy
+──────────────────────────────────────────────────── */
+:root {
+  --c1: #B3ECF5;
+  --c2: #7DD4E8;
+  --c3: #29ABD4;
+  --c4: #1180B8;
+  --c5: #0E5F8A;
+  --c6: #0A3D5C;
+
+  --bg:           #F0F4F8;
+  --sidebar:      #0A3D5C;
+  --card:         #FFFFFF;
+  --border:       #D9E8F0;
+  --text-primary: #111827;
+  --text-secondary:#1f2937;
+  --text-muted:   #374151;
+  --accent:       #1180B8;
+  --accent-light: #E8F4FB;
+  --danger:       #E74C3C;
+  --warning:      #F39C12;
+  --success:      #1180B8;
+  --danger-bg:    #FDEAEA;
+
+  --shadow-sm: 0 1px 4px rgba(10,61,92,0.08);
+  --shadow:    0 2px 12px rgba(10,61,92,0.10);
+  --shadow-lg: 0 4px 24px rgba(10,61,92,0.14);
+  --radius: 8px;
+  --sidebar-w: 224px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text-primary); font-size: 13px; line-height: 1.5; }
+
+/* ── LAYOUT ── */
+.layout { display: flex; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--sidebar);
+  position: fixed; top: 0; left: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  z-index: 100; overflow-y: auto;
+}
+.sidebar-brand {
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-brand .abbr {
+  font-size: 26px; font-weight: 800; color: var(--c2);
+  letter-spacing: 1px; line-height: 1;
+}
+.sidebar-brand .name {
+  font-size: 10px; color: rgba(255,255,255,0.38);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-top: 4px; line-height: 1.5;
+}
+
+.nav-group { padding: 14px 0 6px; }
+.nav-group-label {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.28); padding: 0 18px 6px;
+}
+.nav-link {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 18px; font-size: 12.5px; font-weight: 500;
+  color: rgba(255,255,255,0.56); cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all .15s;
+}
+.nav-link:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.05); }
+.nav-link.active { color: var(--c2); border-left-color: var(--c3); background: rgba(41,171,212,0.12); }
+.nav-link .ni { font-size: 14px; width: 18px; text-align: center; }
+
+.sidebar-foot {
+  margin-top: auto; padding: 14px 18px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 9.5px; color: rgba(255,255,255,0.22); line-height: 1.7;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; }
+.topbar-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.topbar-subtitle { font-size: 11px; color: var(--text-muted); }
+.topbar-badge {
+  display: inline-flex; align-items: center;
+  background: var(--c6); color: #fff;
+  font-size: 10.5px; font-weight: 600;
+  padding: 4px 12px; border-radius: 20px; letter-spacing: .04em;
+}
+
+/* ── MAIN ── */
+.main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; }
+.page { display: none; padding: 20px 24px 60px; animation: fadeIn .2s ease; }
+.page.active { display: block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── PAGE HEADER ── */
+.page-header { margin-bottom: 18px; }
+.page-header h1 { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.page-header p  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── STAT ROW (horizontal KPI band) ── */
+.stat-row {
+  display: flex; gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; margin-bottom: 18px; box-shadow: var(--shadow-sm);
+}
+.stat-box { flex: 1; background: #fff; padding: 13px 16px; min-width: 120px; }
+.stat-box-icon { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.stat-box-icon::before { content: '⬤'; font-size: 7px; color: var(--c3); }
+.stat-box-val { font-size: 22px; font-weight: 700; color: var(--text-primary); line-height: 1.1; }
+.stat-box-val.blue { color: var(--c4); }
+.stat-box-val.neg  { color: var(--danger); }
+.stat-box-val.pos  { color: var(--c5); }
+.stat-box-val.warn { color: var(--warning); }
+.stat-box-change { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; }
+.stat-box-change .up { color: var(--c4); }
+.stat-box-change .dn { color: var(--danger); }
+
+/* ── KPI MINI CARDS ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: 14px; margin-bottom: 18px; }
+.kpi-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: var(--shadow-sm); position: relative;
+  transition: box-shadow .15s, transform .15s;
+}
+.kpi-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.kpi-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 5px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--text-primary); line-height: 1.1; }
+.kpi-value .unit { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+.kpi-value.neg  { color: var(--danger); }
+.kpi-value.pos  { color: var(--c5); }
+.kpi-value.blue { color: var(--c4); }
+.kpi-value.warn { color: var(--warning); }
+.kpi-foot { font-size: 10.5px; color: var(--text-muted); margin-top: 5px; }
+.badge { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-top: 6px; }
+.badge.up   { background: var(--accent-light); color: var(--c4); }
+.badge.dn   { background: var(--danger-bg); color: var(--danger); }
+.badge.warn { background: #FEF9E7; color: #92610A; }
+
+/* ── ALERTS ── */
+.alert { border-radius: var(--radius); padding: 10px 14px; font-size: 12px; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid; line-height: 1.6; }
+.alert.info   { background: var(--accent-light); border-color: var(--c3); color: var(--c6); }
+.alert.warn   { background: #FEF9E7; border-color: var(--warning); color: #7D5A00; }
+.alert.danger { background: var(--danger-bg); border-color: var(--danger); color: #922B21; }
+
+/* ── GRID LAYOUTS ── */
+.grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-1   { display: grid; grid-template-columns: 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-3   { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 16px; }
+@media(max-width:900px){
+  .grid-2,.grid-2-1,.grid-3 { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: repeat(2,1fr); }
+  .stat-row { flex-wrap: wrap; }
+}
+
+/* ── CARDS ── */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+.card-head {
+  padding: 11px 16px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.card-sub   { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+.card-body  { padding: 14px 16px; }
+.card-body.no-pad { padding: 0; }
+
+/* ── TABLES ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+thead th {
+  background: #F5FAFE; padding: 8px 12px;
+  text-align: left; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tbody tr { border-bottom: 1px solid #EEF4F8; transition: background .1s; }
+tbody tr:hover { background: #F5FAFE; }
+tbody td { padding: 8px 12px; color: var(--text-primary); }
+
+.tag { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 9.5px; font-weight: 700; }
+.tag.green  { background: var(--accent-light); color: var(--c5); }
+.tag.red    { background: var(--danger-bg); color: var(--danger); }
+.tag.yellow { background: #FEF9E7; color: #92610A; }
+.tag.blue   { background: var(--accent-light); color: var(--c4); }
+
+/* ── TABS ── */
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; background: var(--border); padding: 4px; border-radius: 7px; width: fit-content; }
+.tab { padding: 6px 15px; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all .15s; }
+.tab.active { background: #fff; color: var(--text-primary); box-shadow: var(--shadow-sm); }
+
+/* ── INSIGHT / RECO CARDS ── */
+.insight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.insight-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.insight-tag { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; padding: 2px 7px; border-radius: 3px; margin-bottom: 8px; }
+.insight-tag.descriptive { background: var(--accent-light); color: var(--c5); border: 1px solid var(--c2); }
+.insight-tag.diagnostic  { background: #FEF9E7; color: #92610A; border: 1px solid #F39C12; }
+.insight-tag.predictive  { background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; }
+.insight-tag.prescriptive{ background: #F5F3FF; color: #7E22CE; border: 1px solid #C4B5FD; }
+.insight-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 5px; }
+.insight-body  { font-size: 11.5px; color: var(--text-muted); line-height: 1.65; }
+.insight-body li { margin-left: 14px; margin-bottom: 4px; list-style: disc; }
+
+/* ── FORECAST BANNER ── */
+.forecast-banner {
+  background: linear-gradient(135deg, var(--c6) 0%, var(--c5) 100%);
+  color: #fff; border-radius: var(--radius); padding: 20px 24px; margin-bottom: 16px;
+}
+.forecast-banner h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.forecast-banner p  { font-size: 11.5px; opacity: .65; margin-bottom: 16px; }
+.forecast-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+.forecast-stat .val { font-size: 28px; font-weight: 800; color: var(--c2); line-height: 1; }
+.forecast-stat .lbl { font-size: 10.5px; opacity: .7; margin-top: 3px; }
+
+/* ── FIVE WHYS ── */
+.whys-list { counter-reset: why; margin-top: 12px; }
+.why-item {
+  background: #F8FBFE; border-radius: 7px; padding: 14px 18px 14px 56px;
+  margin-bottom: 8px; border: 1px solid var(--border); position: relative;
+}
+.why-item::before {
+  counter-increment: why;
+  content: "Why " counter(why);
+  position: absolute; left: 14px; top: 14px;
+  background: var(--c5); color: #fff; font-size: 9.5px; font-weight: 700;
+  padding: 2px 8px; border-radius: 4px; letter-spacing: .04em;
+}
+.why-q { font-size: 12.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.why-a { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; }
+
+/* ── DECISION MATRIX TABLE ── */
+.matrix thead th { background: var(--c6); color: #fff; }
+.stars { color: var(--warning); letter-spacing: 2px; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--c2); border-radius: 10px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="abbr">SRNHS</div>
+    <div class="name">Sto. Rosario National High School<br>Minalin, Pampanga</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Overview</div>
+    <div class="nav-link active" onclick="showPage('home')"><span class="ni">🏠</span>Home</div>
+    <div class="nav-link" onclick="showPage('executive')"><span class="ni">📊</span>Executive Summary</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Analytics</div>
+    <div class="nav-link" onclick="showPage('enrollment')"><span class="ni">📈</span>Enrollment Trends</div>
+    <div class="nav-link" onclick="showPage('retention')"><span class="ni">🎯</span>Dropout & Retention</div>
+    <div class="nav-link" onclick="showPage('repeaters')"><span class="ni">🔁</span>Repeater Analysis</div>
+    <div class="nav-link" onclick="showPage('resources')"><span class="ni">🏫</span>Resources & Teachers</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Intelligence</div>
+    <div class="nav-link" onclick="showPage('diagnostic')"><span class="ni">🔍</span>Diagnostic Analytics</div>
+    <div class="nav-link" onclick="showPage('predictive')"><span class="ni">🔮</span>Predictive Analytics</div>
+    <div class="nav-link" onclick="showPage('prescriptive')"><span class="ni">💡</span>Prescriptive Analytics</div>
+  </div>
+
+  <div class="sidebar-foot">
+    AIS Elec 1 – Business Analytics<br>
+    Bolus · Gonzale · Simbillo<br>
+    SY 2021–2022 to 2025–2026
+  </div>
+</aside>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="topbar-title" id="page-title">School Performance Dashboard</div>
+        <div class="topbar-subtitle" id="page-sub">Sto. Rosario National High School – Minalin, Pampanga</div>
+      </div>
+    </div>
+    <span class="topbar-badge">SY 2021–2026 · 5-Year Analysis</span>
+  </div>
+
+  <!-- ═════════════════ HOME ═════════════════ -->
+  <div class="page active" id="page-home">
+    <div class="page-header">
+      <h1>School Performance Overview</h1>
+      <p>5-Year Data Snapshot · SY 2021–2022 to SY 2025–2026</p>
+    </div>
+
+    <!-- stat row -->
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-box-icon">Current Enrollment</div>
+        <div class="stat-box-val neg">1,002</div>
+        <div class="stat-box-change"><span class="dn">▼ 27.4%</span> from SY 2021–22</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">Dropout Rate</div>
+        <div class="stat-box-val warn">0.60%</div>
+        <div class="stat-box-change"><span class="dn">▲</span> from 0.15% low (2022–23)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">Repeater Rate</div>
+        <div class="stat-box-val warn">2.10%</div>
+        <div class="stat-box-change">⚠ Above 1.45% baseline</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">Student-Teacher Ratio</div>
+        <div class="stat-box-val pos">20:1</div>
+        <div class="stat-box-change"><span class="up">▼ Improved</span> from 27:1</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">Avg Class Size</div>
+        <div class="stat-box-val blue">29</div>
+        <div class="stat-box-change"><span class="up">▼ Down</span> from 38 in 2021–22</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">Retention Rate</div>
+        <div class="stat-box-val pos">99.4%</div>
+        <div class="stat-box-change">996 of 1,002 retained</div>
+      </div>
+    </div>
+
+    <!-- alerts -->
+    <div class="alert danger">
+      <span>🚨</span>
+      <div><strong>Critical Trend:</strong> Total enrollment declined by <strong>378 students (27.4%)</strong> over five school years. At the current rate of ~94 students/year, the school may fall below <strong>900 students by SY 2027–28</strong>, risking reduced government budget allocation.</div>
+    </div>
+    <div class="alert warn">
+      <span>⚠</span>
+      <div><strong>Concern:</strong> The repeater rate of 2.10% in SY 2025–26 remains structurally elevated above the 1.45% pre-baseline. Grades 8 and 9 consistently account for the majority of repeaters.</div>
+    </div>
+    <div class="alert info">
+      <span>✅</span>
+      <div><strong>Strength:</strong> Dropout rates remain very low (under 1% every year). Student-teacher ratios and class sizes are improving. Classroom infrastructure is stable.</div>
+    </div>
+
+    <!-- charts -->
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">5-Year Enrollment Trend</div><div class="card-sub">Total students per school year (BOSY)</div></div>
+        </div>
+        <div class="card-body">
+          <div style="position:relative;height:200px"><canvas id="enrollmentHomeChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">Key KPI Rates</div><div class="card-sub">Dropout & repeater rate trends</div></div>
+        </div>
+        <div class="card-body">
+          <div style="position:relative;height:200px"><canvas id="kpiHomeChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ EXECUTIVE SUMMARY ═════════════════ -->
+  <div class="page" id="page-executive">
+    <div class="page-header">
+      <h1>Executive Summary</h1>
+      <p>Aggregated school performance metrics across all five school years</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Enrollment by Grade Level</div><div class="card-sub">Stacked by grade, per school year</div></div></div>
+        <div class="card-body"><div style="position:relative;height:250px"><canvas id="enrollByGradeChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Annual Summary Table</div><div class="card-sub">Core metrics at a glance</div></div></div>
+        <div class="card-body no-pad">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>School Year</th><th>Enrollment</th><th>Dropouts</th><th>Repeaters</th><th>Teachers</th><th>Rooms</th></tr></thead>
+              <tbody>
+                <tr><td>2021–2022</td><td>1,380</td><td><span class="tag red">12</span></td><td>20</td><td>52</td><td>38</td></tr>
+                <tr><td>2022–2023</td><td>1,305</td><td><span class="tag green">2</span></td><td>25</td><td>53</td><td>34</td></tr>
+                <tr><td>2023–2024</td><td>1,174</td><td><span class="tag green">3</span></td><td><span class="tag red">41</span></td><td>50</td><td>34</td></tr>
+                <tr><td>2024–2025</td><td>1,089</td><td><span class="tag yellow">10</span></td><td>19</td><td>50</td><td>34</td></tr>
+                <tr><td>2025–2026</td><td><strong>1,002</strong></td><td><span class="tag yellow">6</span></td><td>21</td><td>50</td><td>34</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Student-Teacher Ratio Trend</div><div class="card-sub">Total students ÷ total teachers per year</div></div></div>
+        <div class="card-body"><div style="position:relative;height:200px"><canvas id="strChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Class Size Distribution</div><div class="card-sub">Average students per classroom per year</div></div></div>
+        <div class="card-body"><div style="position:relative;height:200px"><canvas id="classSizeChart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ ENROLLMENT ═════════════════ -->
+  <div class="page" id="page-enrollment">
+    <div class="page-header">
+      <h1>Enrollment Trends</h1>
+      <p>Grade-level breakdown and patterns over 5 school years</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Grade 7</div><div class="kpi-value blue">194</div><div class="badge warn">▼ –25.9% from 262</div></div>
+      <div class="kpi-card"><div class="kpi-label">Grade 8</div><div class="kpi-value neg">187</div><div class="badge dn">▼ –29.7% from 266</div></div>
+      <div class="kpi-card"><div class="kpi-label">Grade 9</div><div class="kpi-value neg">157</div><div class="badge dn">▼ –34.9% from 241</div></div>
+      <div class="kpi-card"><div class="kpi-label">Grade 10</div><div class="kpi-value neg">176</div><div class="badge dn">▼ –21.4% from 224</div></div>
+      <div class="kpi-card"><div class="kpi-label">Grade 11</div><div class="kpi-value neg">132</div><div class="badge dn">▼ –33.3% WORST</div></div>
+      <div class="kpi-card"><div class="kpi-label">Grade 12</div><div class="kpi-value blue">156</div><div class="badge dn">▼ –17.5% from 189</div></div>
+    </div>
+
+    <div class="grid-1">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Enrollment by Grade Level — All 5 Years</div><div class="card-sub">Each grade level plotted across SY 2021–22 to 2025–26</div></div></div>
+        <div class="card-body"><div style="position:relative;height:220px"><canvas id="gradeLineChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">JHS vs SHS Enrollment Split</div><div class="card-sub">Junior High (G7–10) vs Senior High (G11–12)</div></div></div>
+        <div class="card-body"><div style="position:relative;height:230px"><canvas id="jhsShsChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Grade-Level Enrollment Table</div><div class="card-sub">Full 5-year breakdown per grade</div></div></div>
+        <div class="card-body no-pad">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Grade</th><th>2021–22</th><th>2022–23</th><th>2023–24</th><th>2024–25</th><th>2025–26</th></tr></thead>
+              <tbody>
+                <tr><td>Grade 7</td><td>262</td><td>205</td><td>160</td><td>198</td><td>194</td></tr>
+                <tr><td>Grade 8</td><td>266</td><td>267</td><td>196</td><td>160</td><td>187</td></tr>
+                <tr><td>Grade 9</td><td>241</td><td>258</td><td>258</td><td>190</td><td>157</td></tr>
+                <tr><td>Grade 10</td><td>224</td><td>224</td><td>239</td><td>235</td><td>176</td></tr>
+                <tr><td>Grade 11</td><td>198</td><td>182</td><td>153</td><td>158</td><td>132</td></tr>
+                <tr><td>Grade 12</td><td>189</td><td>169</td><td>168</td><td>148</td><td>156</td></tr>
+                <tr><td><strong>TOTAL</strong></td><td><strong>1,380</strong></td><td><strong>1,305</strong></td><td><strong>1,174</strong></td><td><strong>1,089</strong></td><td><strong>1,002</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ DROPOUT & RETENTION ═════════════════ -->
+  <div class="page" id="page-retention">
+    <div class="page-header">
+      <h1>Dropout & Retention Analysis</h1>
+      <p>Who is leaving, when, and how many are staying?</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Peak Dropout Year</div><div class="kpi-value neg">12</div><div class="kpi-foot">SY 2021–22 · 0.87% rate</div></div>
+      <div class="kpi-card"><div class="kpi-label">Best Dropout Year</div><div class="kpi-value pos">2</div><div class="kpi-foot">SY 2022–23 · 0.15% rate</div></div>
+      <div class="kpi-card"><div class="kpi-label">5-Year Total Dropouts</div><div class="kpi-value blue">28</div><div class="kpi-foot">Across all grade levels</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Retention Rate</div><div class="kpi-value pos">99.4<span class="unit">%</span></div><div class="kpi-foot">Consistently high</div></div>
+    </div>
+
+    <div class="alert info">
+      <span>✅</span>
+      <div><strong>Strength:</strong> Dropout rates at SRNHS are <em>exceptionally low</em> — well below national averages. Grade 12 has recorded <strong>zero dropouts</strong> across all five school years.</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Dropout Rate Trend (%)</div><div class="card-sub">Annual dropout rate computed per enrollment</div></div></div>
+        <div class="card-body"><div style="position:relative;height:230px"><canvas id="dropoutRateChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Dropouts by Grade Level</div><div class="card-sub">Stacked bar: which grades lose students</div></div></div>
+        <div class="card-body"><div style="position:relative;height:230px"><canvas id="dropoutGradeChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><div class="card-title">Retention Count Per Year</div><div class="card-sub">Total enrolled minus dropouts = retained students</div></div></div>
+      <div class="card-body no-pad">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>School Year</th><th>Total Students</th><th>Dropouts</th><th>Retained</th><th>Retention Rate</th></tr></thead>
+            <tbody>
+              <tr><td>2021–2022</td><td>1,380</td><td>12</td><td>1,368</td><td><span class="tag green">99.1%</span></td></tr>
+              <tr><td>2022–2023</td><td>1,305</td><td>2</td><td>1,303</td><td><span class="tag green">99.8%</span></td></tr>
+              <tr><td>2023–2024</td><td>1,174</td><td>3</td><td>1,171</td><td><span class="tag green">99.7%</span></td></tr>
+              <tr><td>2024–2025</td><td>1,089</td><td>10</td><td>1,079</td><td><span class="tag green">99.1%</span></td></tr>
+              <tr><td>2025–2026</td><td>1,002</td><td>6</td><td>996</td><td><span class="tag green">99.4%</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ REPEATERS ═════════════════ -->
+  <div class="page" id="page-repeaters">
+    <div class="page-header">
+      <h1>Repeater Analysis</h1>
+      <p>Who is failing grades and why? Identifying the at-risk cohort</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Peak Repeater Year</div><div class="kpi-value neg">41</div><div class="kpi-foot">SY 2023–24 · rate 3.49%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Current Repeater Rate</div><div class="kpi-value warn">2.10<span class="unit">%</span></div><div class="badge warn">⚠ Above 1.45% baseline</div></div>
+      <div class="kpi-card"><div class="kpi-label">Baseline Rate (2021–22)</div><div class="kpi-value blue">1.45<span class="unit">%</span></div><div class="kpi-foot">Pre-surge reference point</div></div>
+      <div class="kpi-card"><div class="kpi-label">Gr 8 & 9 Share (2023–24)</div><div class="kpi-value neg">58.5<span class="unit">%</span></div><div class="kpi-foot">24 of 41 repeaters from Gr 8–9</div></div>
+    </div>
+
+    <div class="alert danger">
+      <span>🚨</span>
+      <div><strong>Alert:</strong> The repeater rate <strong>exploded by 140.7%</strong> — from 1.45% in 2021–22 to 3.49% in 2023–24. Even after partial recovery, the 2025–26 rate (2.10%) is still <strong>45% above the pre-baseline</strong>, signaling an incomplete academic recovery.</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Repeater Rate Trend (%)</div><div class="card-sub">Annual repeater rate vs 1.45% baseline</div></div></div>
+        <div class="card-body"><div style="position:relative;height:230px"><canvas id="repeaterRateChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Repeaters by Grade Level</div><div class="card-sub">Which grades have the most repeaters?</div></div></div>
+        <div class="card-body"><div style="position:relative;height:230px"><canvas id="repeaterGradeChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><div class="card-title">Full Repeater Data by Grade Level</div><div class="card-sub">5-year breakdown — concentration in Grades 8 & 9</div></div></div>
+      <div class="card-body no-pad">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Grade</th><th>2021–22</th><th>2022–23</th><th>2023–24</th><th>2024–25</th><th>2025–26</th></tr></thead>
+            <tbody>
+              <tr><td>Grade 7</td><td>7</td><td>3</td><td>5</td><td>4</td><td>4</td></tr>
+              <tr><td>Grade 8</td><td>4</td><td>6</td><td><span class="tag red">12</span></td><td>0</td><td>6</td></tr>
+              <tr><td>Grade 9</td><td>3</td><td>9</td><td><span class="tag red">12</span></td><td>5</td><td>6</td></tr>
+              <tr><td>Grade 10</td><td>1</td><td>3</td><td>7</td><td>8</td><td>5</td></tr>
+              <tr><td>Grade 11</td><td>2</td><td>3</td><td>5</td><td>1</td><td>0</td></tr>
+              <tr><td>Grade 12</td><td>3</td><td>1</td><td>0</td><td>1</td><td>0</td></tr>
+              <tr><td><strong>TOTAL</strong></td><td><strong>20</strong></td><td><strong>25</strong></td><td><span class="tag red"><strong>41</strong></span></td><td><strong>19</strong></td><td><strong>21</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ RESOURCES ═════════════════ -->
+  <div class="page" id="page-resources">
+    <div class="page-header">
+      <h1>Resources & Teacher Deployment</h1>
+      <p>Classroom utilization, teacher ratios, and learning area staffing</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">JHS Teachers by Learning Area</div><div class="card-sub">Number of teachers per subject across 5 years</div></div></div>
+        <div class="card-body"><div style="position:relative;height:250px"><canvas id="jhsTeachChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">SHS Tracks — Teacher Count</div><div class="card-sub">ABM, HUMSS, Home Economics, Maritime</div></div></div>
+        <div class="card-body"><div style="position:relative;height:250px"><canvas id="shsTeachChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Functional Classrooms Over Time</div><div class="card-sub">JHS vs SHS classroom count per year</div></div></div>
+        <div class="card-body"><div style="position:relative;height:220px"><canvas id="roomsChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Student-Teacher Ratio & Class Size</div><div class="card-sub">Both metrics improving as enrollment declines</div></div></div>
+        <div class="card-body"><div style="position:relative;height:220px"><canvas id="ratioCompChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="alert info">
+      <span>✅</span>
+      <div><strong>Resource Strength:</strong> Teacher deployment is stable. The student-teacher ratio improved from 27:1 to 20:1 over 5 years. Class sizes dropped from 36 to 29 — both indicate improved individual attention per student.</div>
+    </div>
+    <div class="alert warn">
+      <span>⚠</span>
+      <div><strong>Note on SHS Tracks:</strong> SRNHS offers only <strong>4 SHS tracks</strong> — ABM, HUMSS, Home Economics, and Maritime. The absence of STEM and ICT is a key driver of Grade 10-to-SHS transition attrition.</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ DIAGNOSTIC ═════════════════ -->
+  <div class="page" id="page-diagnostic">
+    <div class="page-header">
+      <h1>Diagnostic Analytics</h1>
+      <p>Why did these problems happen? Root cause analysis.</p>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('diag','enrollment')">Enrollment Decline</div>
+      <div class="tab" onclick="switchTab('diag','repeaters-diag')">Repeater Surge</div>
+    </div>
+
+    <div id="diag-enrollment">
+      <div class="insight-grid">
+        <div class="insight-card">
+          <span class="insight-tag diagnostic">Diagnostic — Enrollment</span>
+          <div class="insight-title">Root Causes of Enrollment Decline</div>
+          <div class="insight-body">
+            <ul>
+              <li><strong>Financial hardship</strong> — parents decide not to continue children's education</li>
+              <li><strong>Relocation</strong> — families moving away from the service area</li>
+              <li><strong>Early pregnancy</strong> — primarily affecting female students in upper grades</li>
+              <li><strong>Peer pressure</strong> — influencing attendance and continuation decisions</li>
+              <li><strong>Limited SHS track portfolio</strong> — no STEM, no ICT</li>
+              <li><strong>Grade 10 attrition</strong> — students seek diverse strands at other schools</li>
+            </ul>
+          </div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag diagnostic">Impact Pattern</span>
+          <div class="insight-title">Grade-Level Vulnerability</div>
+          <div class="insight-body">
+            <ul>
+              <li><strong>Grade 7</strong> — volatile; dropped to 160 then partially recovered</li>
+              <li><strong>Grade 11</strong> — lost 33.3% of students; worst decline in school</li>
+              <li><strong>Grade 10 → 11</strong> — highest attrition point</li>
+              <li>School relies on <em>passive enrollment habits</em> not active marketing</li>
+              <li>No community needs assessment or strand demand survey</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">The 5 Whys — Enrollment Decline</div><div class="card-sub">Root cause chain analysis</div></div></div>
+        <div class="card-body">
+          <div class="whys-list">
+            <div class="why-item"><div class="why-q">Why did the school lose 378 students over five years?</div><div class="why-a">Fewer new students are entering Grade 7, and many Grade 10 completers choose to leave for SHS at other schools.</div></div>
+            <div class="why-item"><div class="why-q">Why are Grade 10 students leaving and Grade 7 numbers dropping?</div><div class="why-a">Grade 10 students seek a variety of strands not available in SRNHS, while incoming Grade 7 students face financial problems causing parents not to enroll them.</div></div>
+            <div class="why-item"><div class="why-q">Why do Senior High students transfer to another school?</div><div class="why-a">Because SRNHS has a very limited SHS portfolio — only HUMSS, ABM, HE, and Maritime — completely missing highly demanded tracks like STEM or ICT.</div></div>
+            <div class="why-item"><div class="why-q">Why hasn't the school updated its curriculum tracks?</div><div class="why-a">Because the administration has not conducted regular community surveys or market assessments to determine what tracks local industries and students actually need.</div></div>
+            <div class="why-item"><div class="why-q">Why hasn't the school checked what the community needs?</div><div class="why-a">Because the school relies on passive, traditional enrollment habits — assuming students will enroll simply because the school is nearby, rather than actively marketing and updating programs.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="diag-repeaters-diag" style="display:none">
+      <div class="insight-grid">
+        <div class="insight-card">
+          <span class="insight-tag diagnostic">Diagnostic — Repeaters</span>
+          <div class="insight-title">Root Causes of Grade 8 & 9 Repeater Spike</div>
+          <div class="insight-body">
+            <ul>
+              <li>Students <strong>neglecting studies</strong> to spend time gaming or hanging out</li>
+              <li><strong>Lenient elementary grading</strong> — students pass without adequate academic habits</li>
+              <li>Difficulty spike in Grades 8–9 with no preparation</li>
+              <li>Students fall behind early in Q1, making Q4 recovery impossible</li>
+              <li><strong>No Early Warning System</strong> to catch failing students in Q1</li>
+            </ul>
+          </div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag diagnostic">Peak Year Analysis</span>
+          <div class="insight-title">SY 2023–2024: The Crisis Year</div>
+          <div class="insight-body">
+            <ul>
+              <li>Total repeaters reached <strong>41</strong> — up from 20 in baseline year</li>
+              <li>Repeater rate hit <strong>3.49%</strong> — highest in 5 years</li>
+              <li>Grade 8: 12 repeaters (doubled from prior year)</li>
+              <li>Grade 9: 12 repeaters (same as Grade 8)</li>
+              <li>Grades 8 and 9 together = <strong>58.5%</strong> of all repeaters that year</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">The 5 Whys — Repeater Surge</div><div class="card-sub">Root cause chain analysis for high Grade 8 & 9 repeater rates</div></div></div>
+        <div class="card-body">
+          <div class="whys-list">
+            <div class="why-item"><div class="why-q">Why did so many students fail and have to repeat Grades 8 and 9?</div><div class="why-a">Because they failed core difficult subjects like Mathematics (Algebra) and Science.</div></div>
+            <div class="why-item"><div class="why-q">Why did they fail these specific subjects?</div><div class="why-a">Because they fell too far behind early in the school year, making it impossible to catch up and pass by the final grading period.</div></div>
+            <div class="why-item"><div class="why-q">Why did they fall so far behind in their lessons?</div><div class="why-a">Because they neglected their studies and chose to spend their free time gaming with friends or hanging out instead of reviewing.</div></div>
+            <div class="why-item"><div class="why-q">Why did they think they could neglect studies and still pass?</div><div class="why-a">Because they grew used to lenient grading in elementary school, where they were passed easily without having to study hard.</div></div>
+            <div class="why-item"><div class="why-q">Why didn't the school step in before habits caused failure?</div><div class="why-a">Because the school has no Early Warning System to catch struggling students during Q1. Without early detection, teachers do not realize students are failing until it is already too late to intervene.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ PREDICTIVE ═════════════════ -->
+  <div class="page" id="page-predictive">
+    <div class="page-header">
+      <h1>Predictive Analytics</h1>
+      <p>What will happen if current trends continue? Forecasted projections for SY 2026–2028.</p>
+    </div>
+
+    <div class="forecast-banner">
+      <h2>📉 Enrollment Forecast: SY 2026–2028</h2>
+      <p>Based on average annual decline of ~94 students/year (linear projection)</p>
+      <div class="forecast-stats">
+        <div class="forecast-stat"><div class="val">~908</div><div class="lbl">Projected SY 2026–27</div></div>
+        <div class="forecast-stat"><div class="val">~814</div><div class="lbl">Projected SY 2027–28</div></div>
+        <div class="forecast-stat"><div class="val">27.4%</div><div class="lbl">Decline over 5 years</div></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Enrollment Forecast (Linear Trend)</div><div class="card-sub">Actual data (solid) + 2-year forecast (dashed)</div></div></div>
+        <div class="card-body"><div style="position:relative;height:240px"><canvas id="forecastEnrollChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Repeater Rate Forecast</div><div class="card-sub">Without intervention, rate stabilizes above baseline</div></div></div>
+        <div class="card-body"><div style="position:relative;height:240px"><canvas id="forecastRepChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="insight-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="insight-card">
+        <span class="insight-tag predictive">Forecast 1 — Enrollment</span>
+        <div class="insight-title">Total Enrollment Below 1,000</div>
+        <div class="insight-body">At the current average decline of ~94 students/year, enrollment will drop to approximately <strong>900–950 by SY 2027–2028</strong>. This risks reduced government per-student budget allocation and potentially excess teacher capacity.</div>
+      </div>
+      <div class="insight-card">
+        <span class="insight-tag predictive">Forecast 2 — SHS Attrition</span>
+        <div class="insight-title">Grade 11 May Drop to 110–120 Students</div>
+        <div class="insight-body">If JHS-to-SHS transition rates remain unchanged, Grade 11 enrollment could fall to <strong>approximately 110–120 students by SY 2027–2028</strong>. SHS sustainability becomes difficult to justify without structural strand diversification.</div>
+      </div>
+      <div class="insight-card">
+        <span class="insight-tag predictive">Forecast 3 — Repeater Rates</span>
+        <div class="insight-title">Rates Stabilized Above Baseline</div>
+        <div class="insight-body">Without intervention, the repeater rate is projected to hold at <strong>2.10–2.25%</strong> — persistently above the 1.45% pre-pandemic baseline. This is not a recovery; it is a new, elevated normal.</div>
+      </div>
+      <div class="insight-card">
+        <span class="insight-tag predictive">Forecast 4 — Near-Completion Dropouts</span>
+        <div class="insight-title">Elevated Risk of Late-Stage Dropouts</div>
+        <div class="insight-body">Students who fail and repeat Grades 8–9 are at elevated risk of losing academic motivation. If not caught early, these students may continue struggling into Grades 10–11, <strong>increasing the likelihood of near-completion dropouts</strong>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ PRESCRIPTIVE ═════════════════ -->
+  <div class="page" id="page-prescriptive">
+    <div class="page-header">
+      <h1>Prescriptive Analytics</h1>
+      <p>What should be done? Evidence-based, teacher-feasible recommendations.</p>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('presc','enrollment-presc')">Enrollment Actions</div>
+      <div class="tab" onclick="switchTab('presc','repeaters-presc')">Repeater Interventions</div>
+      <div class="tab" onclick="switchTab('presc','matrix')">Decision Matrix</div>
+    </div>
+
+    <div id="presc-enrollment-presc">
+      <div class="insight-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 1</span>
+          <div class="insight-title">🏫 Homeroom Guidance for Career Counseling</div>
+          <div class="insight-body">Grade 10 homeroom advisers should use existing, mandatory DepEd Homeroom Guidance periods in January to explain how current tracks lead directly to real careers. Frame SHS as a career launchpad. <strong>Cost: Zero</strong> — uses existing scheduled periods.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 2</span>
+          <div class="insight-title">🚶 Teacher-Led Feeder School Visits</div>
+          <div class="insight-body">JHS teachers coordinate with local elementary principals to visit Grade 6 classrooms for just <strong>15 minutes</strong> before enrollment season. Distribute simple enrollment flyers and speak directly with upcoming students. Creates personal awareness before other schools recruit them.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 3</span>
+          <div class="insight-title">📋 Early Strand Decision Survey</div>
+          <div class="insight-body">Grade 10 advisers print a simple one-page survey during Q2 asking: <em>"Do you plan to stay at SRNHS for SHS? If not, why?"</em> This gives a 2-quarter window to intervene before final decisions are made.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Long-Term Suggestion</span>
+          <div class="insight-title">📚 Propose STEM or ICT Track Addition</div>
+          <div class="insight-body">The single highest-impact strategic move is proposing a STEM or ICT track to DepEd. This directly addresses why Grade 10 students leave. Advocacy can begin with community demand data from the survey above.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="presc-repeaters-presc" style="display:none">
+      <div class="insight-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 1</span>
+          <div class="insight-title">🚨 Early Warning System (EWS)</div>
+          <div class="insight-body">Subject teachers use a shared Google Sheet or notebook to <strong>flag students who fail the first 2 quizzes or miss 3 assignments in Month 1</strong>. Flagged students receive immediate adviser attention — before they fall too far behind to recover.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 2</span>
+          <div class="insight-title">👥 Peer Tutoring Club</div>
+          <div class="insight-body">Teachers assign high-performing Grade 10 or SHS students to tutor struggling Grade 8 and 9 students during designated remedial hours. Peer tutors often communicate more effectively with students of similar age — and it builds leadership for the tutors.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Recommendation 3</span>
+          <div class="insight-title">📝 PTA Academic Commitment Agreement</div>
+          <div class="insight-body">Once a student is flagged by the EWS, the adviser calls the parent for a structured meeting. The <strong>teacher, parent, and student all sign an Academic Commitment Agreement</strong> acknowledging the issue and committing to specific behavioral changes.</div>
+        </div>
+        <div class="insight-card">
+          <span class="insight-tag prescriptive">Supporting Evidence</span>
+          <div class="insight-title">📊 Why These Work</div>
+          <div class="insight-body">
+            <ul>
+              <li><strong>Zero-cost</strong> — no budget required</li>
+              <li><strong>Teacher-controlled</strong> — no admin approval needed to start</li>
+              <li><strong>Proactive</strong> — act in Q1, not Q4 when it's too late</li>
+              <li>Directly address root causes identified in the 5 Whys</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="presc-matrix" style="display:none">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Decision Matrix — Prioritized Actions</div><div class="card-sub">Strategy ranked by impact, feasibility, and priority</div></div></div>
+        <div class="card-body no-pad">
+          <div class="tbl-wrap">
+            <table class="matrix">
+              <thead><tr><th>Problem Area</th><th>Strategy</th><th>Impact</th><th>Feasibility</th><th>Priority</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag blue">Enrollment</span></td><td>Community outreach — teachers visit local elementary schools for 15 min to invite Grade 6 students</td><td><span class="tag green">High</span></td><td><span class="tag green">High</span></td><td><span class="stars">★★★</span></td></tr>
+                <tr><td><span class="tag blue">Enrollment</span></td><td>In-school career advising — Grade 10 advisers guide students on career paths during Homeroom to retain them for SHS</td><td><span class="tag green">High</span></td><td><span class="tag green">High</span></td><td><span class="stars">★★★</span></td></tr>
+                <tr><td><span class="tag red">Repeaters</span></td><td>Early Warning System — teachers use a shared notebook/sheet to flag students failing quizzes in the first 4 weeks</td><td><span class="tag green">High</span></td><td><span class="tag green">High</span></td><td><span class="stars">★★★</span></td></tr>
+                <tr><td><span class="tag red">Repeaters</span></td><td>Remedial class and peer tutoring — assigning SHS student leaders to tutor struggling Grade 8 and 9 students</td><td><span class="tag green">High</span></td><td><span class="tag yellow">Medium</span></td><td><span class="stars">★★★</span></td></tr>
+                <tr><td><span class="tag blue">Enrollment</span></td><td>Grade 10 strand decision survey — identify students planning to leave and initiate retention conversations early</td><td><span class="tag green">High</span></td><td><span class="tag green">High</span></td><td><span class="stars">★★★</span></td></tr>
+                <tr><td><span class="tag red">Repeaters</span></td><td>PTA Academic Commitment Agreement — parent-teacher-student accountability contract for flagged students</td><td><span class="tag yellow">Medium</span></td><td><span class="tag green">High</span></td><td><span class="stars">★★☆</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert info" style="margin-top:16px">
+        <span>📌</span>
+        <div><strong>Conclusion:</strong> SRNHS maintains strong dropout retention, stable classrooms, and improving student-teacher ratios. However, the 5-year enrollment decline and elevated repeater rate cannot be ignored. All high-priority interventions are within the practical reach of teachers and school-level administrators — requiring only intentionality, documentation, and shared responsibility.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .main -->
+</div><!-- end .layout -->
+
+<script>
+// ═══════════════════ DATA ═══════════════════
+const sy = ['2021–22','2022–23','2023–24','2024–25','2025–26'];
+const totalEnroll = [1380,1305,1174,1089,1002];
+const dropouts    = [12,2,3,10,6];
+const repeaters   = [20,25,41,19,21];
+const teachers    = [52,53,50,50,50];
+const rooms       = [38,34,34,34,34];
+const dropoutRate = [0.87,0.15,0.26,0.92,0.60];
+const repeaterRate= [1.45,1.92,3.49,1.74,2.10];
+const str         = [27,25,23,22,20];
+const classSize   = [36,38,35,32,29];
+const retention   = [1368,1303,1171,1079,996];
+
+const gradeData = {
+  'Grade 7':  [262,205,160,198,194],
+  'Grade 8':  [266,267,196,160,187],
+  'Grade 9':  [241,258,258,190,157],
+  'Grade 10': [224,224,239,235,176],
+  'Grade 11': [198,182,153,158,132],
+  'Grade 12': [189,169,168,148,156]
+};
+const dropByGrade = {
+  'Grade 7': [1,0,0,0,0],'Grade 8': [2,1,0,4,2],
+  'Grade 9': [4,1,1,1,4],'Grade 10': [2,0,1,0,0],
+  'Grade 11':[3,0,1,0,0],'Grade 12': [0,0,0,0,0]
+};
+const repByGrade = {
+  'Grade 7': [7,3,5,4,4],'Grade 8': [4,6,12,0,6],
+  'Grade 9': [3,9,12,5,6],'Grade 10': [1,3,7,8,5],
+  'Grade 11':[2,3,5,1,0],'Grade 12': [3,1,0,1,0]
+};
+
+// ═══════════════════ COLORS ═══════════════════
+const C6 = '#0A3D5C', C5 = '#0E5F8A', C4 = '#1180B8', C3 = '#29ABD4', C2 = '#7DD4E8';
+const DANGER = '#E74C3C', WARNING = '#F39C12', SUCCESS = '#27AE60';
+const gradeColors = [C6, C5, C4, C3, C2, '#B3ECF5'];
+
+const def = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { labels: { font:{size:11,family:"'Inter',sans-serif"}, boxWidth:12, padding:14 } } },
+  scales: {
+    x: { grid:{color:'#EEF4F8'}, ticks:{font:{size:11,family:"'Inter',sans-serif"}} },
+    y: { grid:{color:'#EEF4F8'}, ticks:{font:{size:11,family:"'Inter',sans-serif"}} }
+  }
+};
+
+// ═══════════════════ CHARTS ═══════════════════
+window.addEventListener('load', () => {
+
+  // HOME: Enrollment trend
+  new Chart(document.getElementById('enrollmentHomeChart'), {
+    type:'line', data:{ labels:sy, datasets:[{
+      label:'Total Enrollment', data:totalEnroll,
+      borderColor:C4, backgroundColor:'rgba(17,128,184,.08)',
+      fill:true, tension:.4, pointRadius:5, pointBackgroundColor:C4
+    }]}, options:{...def}
+  });
+
+  // HOME: KPI rates
+  new Chart(document.getElementById('kpiHomeChart'), {
+    type:'line', data:{ labels:sy, datasets:[
+      { label:'Dropout Rate (%)', data:dropoutRate, borderColor:DANGER, tension:.4, pointRadius:5, pointBackgroundColor:DANGER },
+      { label:'Repeater Rate (%)', data:repeaterRate, borderColor:WARNING, tension:.4, pointRadius:5, pointBackgroundColor:WARNING }
+    ]}, options:{...def}
+  });
+
+  // EXECUTIVE: Enrollment by grade stacked
+  new Chart(document.getElementById('enrollByGradeChart'), {
+    type:'bar', data:{ labels:sy, datasets: Object.entries(gradeData).map(([g,d],i) => ({
+      label:g, data:d, backgroundColor:gradeColors[i], stack:'s'
+    }))}, options:{...def, scales:{ x:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}}, y:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}} }}
+  });
+
+  // EXECUTIVE: STR
+  new Chart(document.getElementById('strChart'), {
+    type:'line', data:{ labels:sy, datasets:[{
+      label:'Student-Teacher Ratio', data:str,
+      borderColor:C3, backgroundColor:'rgba(41,171,212,.08)',
+      fill:true, tension:.4, pointRadius:5, pointBackgroundColor:C3
+    }]}, options:{...def}
+  });
+
+  // EXECUTIVE: Class size
+  new Chart(document.getElementById('classSizeChart'), {
+    type:'bar', data:{ labels:sy, datasets:[{
+      label:'Avg Class Size', data:classSize,
+      backgroundColor: classSize.map(v => v > 36 ? DANGER : v > 32 ? WARNING : C3)
+    }]}, options:{...def}
+  });
+
+  // ENROLLMENT: Grade line
+  new Chart(document.getElementById('gradeLineChart'), {
+    type:'line', data:{ labels:sy, datasets: Object.entries(gradeData).map(([g,d],i) => ({
+      label:g, data:d, borderColor:gradeColors[i], tension:.4,
+      pointRadius:4, pointBackgroundColor:gradeColors[i], fill:false
+    }))}, options:{...def}
+  });
+
+  // ENROLLMENT: JHS vs SHS
+  const jhsT = sy.map((_,i) => gradeData['Grade 7'][i]+gradeData['Grade 8'][i]+gradeData['Grade 9'][i]+gradeData['Grade 10'][i]);
+  const shsT = sy.map((_,i) => gradeData['Grade 11'][i]+gradeData['Grade 12'][i]);
+  new Chart(document.getElementById('jhsShsChart'), {
+    type:'bar', data:{ labels:sy, datasets:[
+      { label:'JHS (G7–10)', data:jhsT, backgroundColor:C5 },
+      { label:'SHS (G11–12)', data:shsT, backgroundColor:C3 }
+    ]}, options:{...def}
+  });
+
+  // DROPOUT: Rate chart
+  new Chart(document.getElementById('dropoutRateChart'), {
+    type:'line', data:{ labels:sy, datasets:[{
+      label:'Dropout Rate (%)', data:dropoutRate,
+      borderColor:DANGER, backgroundColor:'rgba(231,76,60,.08)',
+      fill:true, tension:.4, pointRadius:6,
+      pointBackgroundColor: dropoutRate.map(v => v > 0.7 ? DANGER : WARNING)
+    }]}, options:{...def}
+  });
+
+  // DROPOUT: By grade
+  new Chart(document.getElementById('dropoutGradeChart'), {
+    type:'bar', data:{ labels:sy, datasets: Object.entries(dropByGrade).map(([g,d],i) => ({
+      label:g, data:d, backgroundColor:gradeColors[i], stack:'s'
+    }))}, options:{...def, scales:{ x:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}}, y:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}} }}
+  });
+
+  // REPEATER: Rate chart
+  new Chart(document.getElementById('repeaterRateChart'), {
+    type:'line', data:{ labels:sy, datasets:[
+      { label:'Repeater Rate (%)', data:repeaterRate, borderColor:WARNING, backgroundColor:'rgba(243,156,18,.08)', fill:true, tension:.4, pointRadius:6, pointBackgroundColor:WARNING },
+      { label:'Baseline 1.45%', data:[1.45,1.45,1.45,1.45,1.45], borderColor:'#94a3b8', borderDash:[5,5], pointRadius:0 }
+    ]}, options:{...def}
+  });
+
+  // REPEATER: By grade
+  new Chart(document.getElementById('repeaterGradeChart'), {
+    type:'bar', data:{ labels:sy, datasets: Object.entries(repByGrade).map(([g,d],i) => ({
+      label:g, data:d, backgroundColor:gradeColors[i], stack:'s'
+    }))}, options:{...def, scales:{ x:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}}, y:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}} }}
+  });
+
+  // RESOURCES: JHS teachers
+  const jhsSub = ['Filipino','English','Math','Science','APAN','MAPEH','TLE','ESP'];
+  const jhsTch = [[3,4,4,4,4],[6,5,5,5,5],[6,6,5,5,5],[5,5,5,5,5],[4,4,3,3,3],[5,5,4,4,4],[6,6,6,6,6],[2,2,2,2,2]];
+  new Chart(document.getElementById('jhsTeachChart'), {
+    type:'bar', data:{ labels:sy, datasets: jhsSub.map((s,i) => ({
+      label:s, data:jhsTch[i], backgroundColor:gradeColors[i%gradeColors.length], stack:'s'
+    }))}, options:{...def, scales:{ x:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}}, y:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}} }}
+  });
+
+  // RESOURCES: SHS teachers
+  new Chart(document.getElementById('shsTeachChart'), {
+    type:'bar', data:{ labels:sy, datasets:[
+      { label:'ABM', data:[9,9,9,9,9], backgroundColor:C6, stack:'s' },
+      { label:'HUMSS', data:[2,2,3,3,3], backgroundColor:C4, stack:'s' },
+      { label:'Home Economics', data:[4,4,4,4,4], backgroundColor:C3, stack:'s' },
+      { label:'Maritime', data:[4,4,4,4,4], backgroundColor:C2, stack:'s' }
+    ]}, options:{...def, scales:{ x:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}}, y:{stacked:true,grid:{color:'#EEF4F8'},ticks:{font:{size:11}}} }}
+  });
+
+  // RESOURCES: Rooms
+  new Chart(document.getElementById('roomsChart'), {
+    type:'bar', data:{ labels:sy, datasets:[
+      { label:'JHS Rooms', data:[28,24,24,24,24], backgroundColor:C5 },
+      { label:'SHS Rooms', data:[10,10,10,10,10], backgroundColor:C3 }
+    ]}, options:{...def}
+  });
+
+  // RESOURCES: STR vs Class Size
+  new Chart(document.getElementById('ratioCompChart'), {
+    type:'line', data:{ labels:sy, datasets:[
+      { label:'Student-Teacher Ratio', data:str, borderColor:C5, tension:.4, pointRadius:5 },
+      { label:'Class Size', data:classSize, borderColor:C3, tension:.4, pointRadius:5 }
+    ]}, options:{...def}
+  });
+
+  // PREDICTIVE: Enrollment forecast
+  const syF = [...sy,'2026–27','2027–28'];
+  new Chart(document.getElementById('forecastEnrollChart'), {
+    type:'line', data:{ labels:syF, datasets:[
+      { label:'Actual Enrollment', data:[...totalEnroll,null,null], borderColor:C4, backgroundColor:'rgba(17,128,184,.08)', fill:true, tension:.4, pointRadius:5, pointBackgroundColor:C4 },
+      { label:'Forecasted (Linear)', data:[null,null,null,null,1002,908,814], borderColor:DANGER, borderDash:[6,4], tension:.4, pointRadius:5, pointBackgroundColor:DANGER, fill:false }
+    ]}, options:{...def}
+  });
+
+  // PREDICTIVE: Repeater forecast
+  new Chart(document.getElementById('forecastRepChart'), {
+    type:'line', data:{ labels:[...sy,'2026–27','2027–28'], datasets:[
+      { label:'Repeater Rate (%)', data:[...repeaterRate,null,null], borderColor:WARNING, tension:.4, pointRadius:5, pointBackgroundColor:WARNING },
+      { label:'Forecasted Rate', data:[null,null,null,null,2.10,2.15,2.25], borderColor:DANGER, borderDash:[6,4], tension:.4, pointRadius:5, pointBackgroundColor:DANGER },
+      { label:'Baseline 1.45%', data:[...sy,'2026–27','2027–28'].map(()=>1.45), borderColor:'#94a3b8', borderDash:[4,4], pointRadius:0 }
+    ]}, options:{...def}
+  });
+});
+
+// ═══════════════════ NAVIGATION ═══════════════════
+const pageTitles = {
+  home:         ['School Performance Dashboard','5-Year Overview · SY 2021–22 to 2025–26'],
+  executive:    ['Executive Summary','Aggregated KPI metrics across all school years'],
+  enrollment:   ['Enrollment Trends','Grade-level breakdown and analysis'],
+  retention:    ['Dropout & Retention Analysis','Who is leaving and when'],
+  repeaters:    ['Repeater Analysis','Academic failure patterns and root causes'],
+  resources:    ['Resources & Teacher Deployment','Classrooms, ratios, and staffing'],
+  diagnostic:   ['Diagnostic Analytics','Root cause analysis — Why did it happen?'],
+  predictive:   ['Predictive Analytics','Forecasted projections for SY 2026–2028'],
+  prescriptive: ['Prescriptive Analytics','Evidence-based recommendations for action']
+};
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(n => {
+    if(n.getAttribute('onclick') && n.getAttribute('onclick').includes("'"+id+"'")) n.classList.add('active');
+  });
+  const [title,sub] = pageTitles[id] || ['Dashboard',''];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-sub').textContent = sub;
+}
+
+function switchTab(group, tabId) {
+  const allSiblings = document.querySelectorAll(`[id^="${group}-"]`);
+  allSiblings.forEach(el => el.style.display = 'none');
+  document.getElementById(group+'-'+tabId).style.display = 'block';
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => {
+    if(t.getAttribute('onclick') && t.getAttribute('onclick').includes("'"+tabId+"'")) t.classList.add('active');
+    else if(t.getAttribute('onclick') && t.getAttribute('onclick').includes("'"+group+"'")) t.classList.remove('active');
+  });
+}
+</script>
+</body>
+</html>
